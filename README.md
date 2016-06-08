@@ -2,4 +2,4 @@
 
 
 compile hiSixTrack:
-	./make_six gfortran fluka -crlibm -cernlib
+	./make_six gfortran fluka -crlibm -cernlib backtrk
