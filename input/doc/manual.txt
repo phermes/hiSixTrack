@@ -1,0 +1,32 @@
+############################### HISIX MANUAL ###################################
+
+
+
+# DESCRIPTION OF OUTPUT FILES
+
+	fort.208 
+		three columns:
+		# Collimator ID  	Number of Nucleons Lost        Energy lost in the collimator [GeV]
+	
+	fort.209
+		particle id of ions intercepted by collimators
+		# Collimator ID     Ion ID
+
+	fort.210
+		Detailed information on the ion fragments
+		#   A    Z    Energy/charge    Energy    x    y    
+
+	fort.822
+		properties of ion generated ion fragments
+		# Particle ID     Parent Particle ID    Collimator ID    A    Z    Energy 
+
+	fort.999
+		aperture losses, see description of SixTrack online aperture check
+
+	NAME001_fort.66
+		correction file for collimator losses. particles not sent back to the tracker which however left the collimator ([protons], neutrons, pions, ...)
+		# FLUKA particle ID    A    Z    Collimator ID    Energy[GeV]
+
+	NAME001_fort.67
+		Impact locations on the collimators
+		# SixTrack particle ID    FLUKA particle ID    Parent    A    Z    Energy[GeV]    x    z
