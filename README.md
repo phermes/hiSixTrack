@@ -19,8 +19,11 @@ Run the installation script for hiSixTrack
 	
 	./hiSixTrack/src/tools/install/install.sh
 	
-	
+This script will copy over the necessary hiSixTrack and FLUKA files to allow for the tracking and particle matter interaction simulation of heavy ions instead of protons. 
 
-Compile hiSixTrack:
+# Compilation
 
+With the files copied over, the compilation can be started. To compile hiSixTrack we switch to the directory sixtrack and perform the compilation command:
+
+	cd sixtrack
 	./make_six gfortran fluka -crlibm -cernlib backtrk
