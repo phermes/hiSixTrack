@@ -1,0 +1,9 @@
+universe = vanilla
+executable = $(filename)
+output = emails/$(filename).out
+error = emails/$(filename).err
+log = emails/$(filename).log
+ShouldTransferFiles = YES
+WhenToTransferOutput = ON_EXIT_OR_EVICT
++JobFlavour = "longlunch"
+queue filename from jobs.txt
