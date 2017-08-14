@@ -9,5 +9,6 @@ This github repository contains only files which are modified with respect to th
 
 
 
-compile hiSixTrack:
+Compile hiSixTrack:
+
 	./make_six gfortran fluka -crlibm -cernlib backtrk
