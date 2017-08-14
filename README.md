@@ -15,6 +15,11 @@ Then switch to the directory ion_coupling and clone the hiSixTrack github reposi
 	git clone http://www.github.com/phermes/hiSixTrack 
 	
 
+Run the installation script for hiSixTrack
+	
+	./hiSixTrack/src/tools/install/install.sh
+	
+	
 
 Compile hiSixTrack:
 
