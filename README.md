@@ -23,7 +23,14 @@ This script will copy over the necessary hiSixTrack and FLUKA files to allow for
 
 # Compilation
 
+## hiSixTrack
 With the files copied over, the compilation can be started. To compile hiSixTrack we switch to the directory sixtrack and perform the compilation command:
 
 	cd sixtrack
 	./make_six gfortran fluka -crlibm -cernlib backtrk
+
+## FLUKA
+Compile the FLUKA executable:
+	
+	cd fluka
+	make all
