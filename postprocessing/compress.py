@@ -13,6 +13,20 @@ if len(sys.argv)==1:
 print("Running compression script for directory: {0}".format(str(sys.argv[1])))
 
 
+
+
+def read_twiss(tfname):
+    for line in open(tfname):
+        if 'KEYWORD' in line:
+            cols=line.split()[1:]
+            break
+    twiss = pd.read_csv(tfname,
+                    skiprows=47,
+                    delim_whitespace=True,
+                    names=cols)
+    twiss = twiss[twiss['KEYWORD']=='RCOLLIMATOR']
+    return twiss[['NAME','S']]
+
 class hisix_result:
     def __init__(self, dirname):
         self.coll = None      # compressed collimator loss data
@@ -31,6 +45,9 @@ class hisix_result:
                 break
             except IndexError:
                 continue
+                
+        # get the filename of the twiss file in input
+        self._find_twiss_filename()
               
     def _next(self):
         self.dir = next(self._dirs)
@@ -43,6 +60,12 @@ class hisix_result:
     def _find_correction(self):
         self.corrfn = glob.glob('{0}/*fort.66.gz'.format(self.dir))[0].split('/')[-1]
         print('Found correction filename: {0}'.format(self.corrfn))
+        
+    def _find_twiss_filename(self):
+        print('Searching twiss file in: {0}/../../input/'.format(self.maindir))
+
+        self.twissfn = glob.glob('{0}/../../input/*.tfs'.format(self.maindir))[0].split('/')[-1]
+        print('Found twiss file: {0}'.format(self.twissfn))
         
     def _read_correction(self):
         df = pd.read_csv("{0}/{1}".format(self.dir,self.corrfn), delim_whitespace=True, 
@@ -90,6 +113,8 @@ class hisix_result:
         self.coll = self.coll.append(self.corr, ignore_index=True)
         self.coll = self.coll.groupby(self.coll['colid'],as_index=False).sum()
         
+        self._get_coll_pos()
+        
         # make new directory if it doesn't exist
         outputdir = "{0}/summary".format(self.maindir)
         if not os.path.exists(outputdir):        
@@ -97,27 +122,51 @@ class hisix_result:
             
         # save summary to new directory
         print("Writing output files to {0}".format(outputdir))
-        self.coll.to_csv("{0}/fort.208".format(outputdir),sep=' ', index=False, header=False)
-        self.apun.to_csv("{0}/fort.999".format(outputdir),sep=' ', index=False, header=False)
-        self.aper.to_csv("{0}/fort.999.comp".format(outputdir),sep=' ', index=False, header=False)
+        self.coll.to_csv("{0}/fort.208".format(outputdir),sep='\t', index=False, header=False)
+        self.apun.to_csv("{0}/fort.999".format(outputdir),sep='\t', index=False, header=False)
+        self.aper.to_csv("{0}/fort.999.comp".format(outputdir),sep='\t', index=False, header=False)
 
         print("Summary: ")
         print("Successfully read runs: {0}".format(self.successful))
         print("Unsuccessful read attempts: {0}".format(self.unsuccessful))
+        print("Output written to {0}".format(outputdir))
+
+    def _get_coll_pos(self):
+        # read the twiss file to get collimator id and position
+        twiss = read_twiss('{0}/../../input/{1}'.format(self.maindir,self.twissfn))
+
+        # read the collimator list to get id and name
+        clist = pd.read_csv('{0}/../../input/{1}'.format(self.maindir,'fort3.list'),
+                             delim_whitespace=True,
+                             usecols=[0,2],
+                             names=['NAME','colid'])
+        clist['NAME'] = clist['NAME'].apply(lambda x:x.upper())
+
+        # merge on common name
+        df2 = pd.merge(twiss, clist, on='NAME', how='outer')
+        df2 = df2[df2['colid']>0]
+
+        # merge with the losses
+        df3 = pd.merge(df2,self.coll, on='colid', how='outer')
+        df3 = df3[df3.energy>0]
+
+        self.coll = df3
 
         
-    def read_losses(self):
+    def read_losses(self,verbose=False):
         '''produce compressed loss files for all studies in the selected directory'''
         while True:
             try:
                 self._next()
             except StopIteration:
                 break
-            print("Processing {0}".format(self.dir))
+            if verbose:
+                print("Processing {0}".format(self.dir))
             self._add_lossmap_data()
         
         self._finalize()
 
 
+
 h = hisix_result(str(sys.argv[1]))
-h.read_losses()
+h.read_losses(verbose=True)
