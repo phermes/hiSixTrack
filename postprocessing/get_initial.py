@@ -1,258 +1,207 @@
-# get initial conditions from initial run in hisix
-
-
-import numpy as np
-import sys
-import gzip
-import glob
-import os
 import pandas as pd
-
-
-#### DEFINE FUNCTIONS
-
-def progbar(progress):
-    nmax = round(progress*20,1)
-    nn   = 0
-    fs   = ''
-    while nn<nmax:
-        fs = fs+'-'
-        nn +=1
-    while nn<20:
-        fs = fs+' '
-        nn +=1
-    print '\r-->  ['+fs+'] ('+str(round(progress*100,1))+'%)',
-
-
-def impact_in_range(xtcp,x,b0,b1,jaw=0):
-    '''Returns True if b in selected range. xtcp and x in cm, b0 and b1 in um'''
-    if jaw==0:  
-        b = (abs(x)-xtcp)*1e4
-        if b>b0 and b<b1:
-            return True
-        else:
-            return False
-    elif (jaw==1 and x>0):
-        b = (x-xtcp)*1e4
-        if b>b0 and b<b1:
-            return True
-        else:
-            return False
-    elif (jaw==-1 and x<0):
-        b = (-x-xtcp)*1e4
-        if b>b0 and b<b1:
-            return True
-        else:
-            return False        
-        
-    
-def get_side(x):
-    if x>0:
-        return 'left'
-    else:
-        return 'right'
-
-class initial:
-    def __init__(self,path):
-        self.initial = []
-        self.left    = open(path+'initial.left','w+')
-        self.righ    = open(path+'initial.right','w+')
-        self.lwrit   = 0
-        self.rwrit   = 0
-    def load(self,fname):
-        self.initial = []
-        with gzip.open(fname+'initial.dat.gz') as f:
-            for j,line in enumerate(f):
-                self.initial.append(line)
-    def write_by_index(self,indx,side):
-        string_to_write = self.initial[indx]
-        if side == 'left':
-            self.lwrit+=1
-            self.left.write(string_to_write)
-        else:
-            self.rwrit+=1
-            self.righ.write(string_to_write)
-    def flush(self):
-        print '-->  Finalizing'
-        self.left.close()
-        self.righ.close()
-        print '-->  Written lines:'
-        print '-->  Left: %i Right:%i' % (self.lwrit,self.rwrit)
-        print '-->  Done'
-
-
-
-def generate_initialdat(path,npart,jaw='both'):
-    print '-->  WARNING:'
-    print '-->  function generate_initialdat depreciated'
-    print '-->  using generate_initial instead'
-    generate_initial(path,npart,jaw=jaw)
-
-
-def generate_initial(path,npart,jaw='both'):
-
-    # some initialization
-    if jaw not in ['left','right','both']:
-        raise Exception("jaw keyword unknown, user 'left', 'right' or 'both'")
-
-    lQ = True
-    rQ = True
-    col= ['ID','WEIGHT','WEIGHT2','X','Y','S','PX','PY','PS','A','Z','m','E','Sigma']
-    
-    # read the generated files with initial distribution
-    try:
-        left = pd.read_csv(path+'initial.left',delim_whitespace=True)
-        left.columns = col
-    except:
-        lQ   = False                                                    # don't handle when file empty
-    try:
-        righ = pd.read_csv(path+'initial.right',delim_whitespace=True)
-        righ.columns = col
-    except:
-        rQ   = False
-
-    if not (lQ and rQ) and (jaw=='both'):
-        raise Exception("Can't read left and right particle distribution")
-
-    if (rQ and lQ and jaw=='both'):
-        print '-->  Sampling distribution for particles starting from both jaws'                
-        idx   = min(len(left),len(righ))
-        left  = left[0:idx]
-        righ  = righ[0:idx]
-        rawdf = pd.concat((left,righ))
-    if (rQ and not lQ) or jaw=='right':
-        print '-->  Sampling distribution for particles starting from right jaw'        
-        rawdf = righ
-    if (lQ and not rQ) or jaw=='left':
-        print '-->  Sampling distribution for particles starting from left jaw'
-        rawdf = left       
-
-    iturn = 1+npart/len(rawdf)                                   # number of iterations to fill file
-
-    rawdf['WEIGHT2']  = rawdf['WEIGHT2'].map(lambda x: '%2.1f' % x)
-    rawdf['S']        = rawdf['S'].map(lambda x: '%2.1f' % x)
-    rawdf['X']        = rawdf['X'].map(lambda x: '%14.13E' % x)
-    rawdf['PX']       = rawdf['PX'].map(lambda x: '%14.13E' % x)
-    rawdf['Y']        = rawdf['Y'].map(lambda x: '%14.13E' % x)
-    rawdf['PY']       = rawdf['PY'].map(lambda x: '%14.13E' % x)
-    rawdf['PS']       = rawdf['PS'].map(lambda x: '%2.1f' % x)
-    rawdf['m']        = rawdf['m'].map(lambda x: '%16.13f' % x)
-    rawdf['E']        = rawdf['E'].map(lambda x: '%14.13E' % x)
-    
-    with open('initial.dat', 'a') as f:
-        for i in range(iturn):
-            #print '\r-->  writing pack', i, '/', iturn,
-            progbar(float(i)/float(iturn))
-            rawdf.ID    = np.arange(1+i*len(rawdf),(1+i)*len(rawdf)+1)
-            rawdf.to_csv(f,header=False,index=False,sep='\t')            
-
+import glob
+import os, sys
+import numpy as np
+import getopt
 
 
             
+existing = False
 
-def main(path,b0,b1,xtcp,jaw=0):
-    # jaw=0 when impacts on both jaws should be sampled
+def usage():
+    mess='''
+    get_initial.py 
+
+    Creates the initial distributions for hisixtrack with predefined parameters.
+
+    Usage: 
+
+    python get_initial.py --path="/path/to/study" --b1=1 --b2=3 --halpgap=0.1512391
     
-    b0,b1 = float(b0), float(b1)
-    xtcp  = float(xtcp)
-    impQ  = False
+    will create the initial distribution summary files
 
-    print '-->  Running get_initial in directory: %s' % path
-    print '-->  Selected impact parameters between %2.1f um and %2.1f um' % (b0, b1)
+    If the summary files exist and we want to create a initial.dat file for a study, we use:
+    
+    python get_initial.py --path="/path/to/study/new_initial/initial_right.dat" --existing  --npart=1000000
+    this will create a new file containing 10000 particles 
+    
+    '''
+    print(mess)
 
-    ini = initial(path)
-    ntot = len(glob.glob(path+"/run*/"))
-    for i,fname in enumerate(glob.glob(path+"/run*/")):                        # loop over directories
-        # find the impact file
-        if not impQ:
-            for fl in os.listdir(fname):
-                if fl.endswith(".67.gz") or fl.endswith(".67"):
-                    impactfile = fl
-                    impQ       = True
-                    print '-->  Impact file found:', impactfile
-                    print '-->  Impact file directory:', fname
-            if not impQ:
+
+        
+def create_new_ini_files(path,b0,b1,hgap):
+    h = initial_result(path, hgap=hgap, b0=b0,b1=b1)
+    h.read_all()
+
+    
+class initial_result:
+    def __init__(self, dirname, hgap, b0, b1):
+        self.newini = None      # compressed collimator loss data
+        
+        self.hgap = hgap
+        self.b0   = b0
+        self.b1   = b1
+        
+        self.successful, self.unsuccessful = 0, 0       
+        self._dirs   = glob.iglob("{0}/run_*".format(dirname))
+        self.maindir = dirname
+        
+        while True:
+            try:
+                self._next()
+                self._find_hitfile()
+                break
+            except IndexError:
                 continue
+                
+    def _next(self):
+        self.dir = next(self._dirs)
+        
+    def _find_hitfile(self):
+        self.hitfn = glob.glob('{0}/*fort.67.gz'.format(self.dir))[0].split('/')[-1]
+        print('Found hit filename: {0}'.format(self.hitfn))   
+        
+    def _read_hits(self,sign):
+        df = pd.read_csv("{0}/{1}".format(self.dir,self.hitfn),
+                         delim_whitespace=True,usecols=[1,6],names=['pid','x'])
+        
+        df = df.assign(b=df['x'].apply(self._get_impact_par))
+        self.hit = df
+        self._filter_hits(sign)
+        
+    def _get_impact_par(self,x):
+        x    = abs(x)
+        dx   = (x-self.hgap)*1e4
+        return dx
+        
+    def _filter_hits(self,sign):
+        '''Selects entries with the desired impact parameters'''
+        if sign>0:
+            self.hit = self.hit[(self.hit['x']>0) & (self.hit['b']<self.b1) & (self.hit['b']>self.b0)]
+        else:
+            self.hit = self.hit[(self.hit['x']<0) & (self.hit['b']<self.b1) & (self.hit['b']>self.b0)]
+        
+    def _read_ini(self):
+        df2 = pd.read_csv("{0}/{1}".format(self.dir,'initial.dat.gz'),
+                 delim_whitespace=True,header=None)
 
-        print '\r-->  Analzying run', i, '/', ntot ,
+        cols = []
+        for i in range(len(df2.columns)):
+            if i==0:
+                _j = 'pid'
+            else:
+                _j = i
+            cols.append(_j)
 
-        try:
-            with gzip.open(fname+impactfile) as f:
-                ini.load(fname)                                                    # load initial file
-                for line in f:
-                    pid,x = np.array(line.split())[[1,6]]
-                    pid,x = int(pid),float(x)
-                    if impact_in_range(xtcp,x,b0,b1,jaw=jaw):
-                        side = get_side(x)
-                        ini.write_by_index(pid-1,side)
-                        
-        except:
-            pass
-        if i==-1:
-            break
-    ini.flush()
+        df2.columns = cols
+        df2['pid']  = df2.index+1
+        self._ini   = df2
+        
+    def _get_filtered_ini(self,s):
+        self._read_hits(s)
+        self._read_ini()
+        self._filteredini = pd.merge(self.hit[['pid']],self._ini,on='pid')
+        self._add_filtered_ini()
+        
+    def _add_filtered_ini(self):
+        if self.newini is None:
+            self.newini = self._filteredini
+        else:
+            self.newini = self.newini.append(self._filteredini, ignore_index=True)
+        pass
+
+    def save_newini(self,i):
+        # make new directory if it doesn't exist
+        
+        self.newini['pid']  = self.newini.index+1
+        
+        outputdir = "{0}/new_initial".format(self.maindir)
+        if not os.path.exists(outputdir):        
+            os.makedirs(outputdir)
+        lr = {-1:'right',1:'left'}
+        self.newini.to_csv("{0}/initial_{1}.dat".format(outputdir,lr[i]),
+                           sep='\t', index=False, header=False)
+        print("wrote file to {0}/initial_{1}.dat".format(outputdir,lr[i]))
+
+    def read_all(self,verbose=False):
+        for s in [-1, 1]:
+            print('Performing analysis for jaw {0}...'.format(s))
+            self._dirs   = glob.iglob("{0}/run_*".format(self.maindir))
+            self.newini  = None      
+            while True:
+                try:
+                    self._next()
+                except StopIteration:
+                    break
+                if verbose:
+                    print("Processing {0}".format(self.dir))
+                try:
+                    self._get_filtered_ini(s)
+                except FileNotFoundError:
+                    continue
+            self.save_newini(s)
 
 
-def bdist(path,xtcp,jaw=0):
-    '''sample the distribution of impact parameters'''
-
-    barray = []
-    xtcp   = float(xtcp)                                            # tcp half gap
-    impQ   = False                                                  # logical switch
-    ini    = initial(path)                                          
-    ntot   = len(glob.glob(path+"/run*/"))                          # total number of directories
-    nleft  = 0                                                      # number of particles on left jaw
-    nrigh  = 0                                                      # right jaw
+def floor(x):
+    return int(x - x % 1)
+            
+def multiply(path,npart):
+    df = pd.read_csv(path,delim_whitespace=True,header=None)
+    newdf = df
     
-    print '-->  Sampling impact parameter distribution in directory: %s' % path
-    
-    for i,fname in enumerate(glob.glob(path+"/run*/")):             # loop over directories
-        if not impQ:
-            for fl in os.listdir(fname):
-                if fl.endswith(".67.gz"):                           # find the impact file
-                    impactfile = fl
-                    impQ       = True
-                    print '-->  Impact file found:', impactfile
-                    print '-->  Impact file directory:', fname
-            if not impQ:
-                continue                                            # continue trying to find file
+    # get number of required iterations
+    iters = floor(np.log2(npart/float(len(df))))
+    print("iterations", iters)
 
-        print '\r-->  Analzying run', i, '/', ntot ,                # only if .67 file found
+    for i in range(iters):
+        if len(newdf)<npart:
+            newdf = newdf.append(newdf,ignore_index=True)
+        else:
+            break    
+    remaining_rows = npart-len(newdf)
+    newdf_short    = newdf.head(remaining_rows)
+    newdf = newdf.append(newdf_short,ignore_index=True)
+    newdf[0] = newdf.index+1
+    newdf.to_csv("{0}.big".format(path), sep='\t', index=False, header=False)
+    print("Desired length: {0} - Final length: {1}".format(npart,len(newdf)))
 
-        try:
-            with gzip.open(fname+impactfile) as f:
-                ini.load(fname)                                     # load initial file
-                for line in f:
-                    pid,x,xp = np.array(line.split())[[1,6,7]]           
-                    pid,x,xp = int(pid),float(x),float(xp)
-                    if x>0:
-                        nleft+=1
-                    else:
-                        nrigh+=1
-                    barray.append([float(x),float(xp)])
-        except:
-            pass
-        if i==-1:
-            break
-    #ini.flush()
-    print '\n-->  Particles at x>0: ', nleft
-    print '-->  Particles at x<0: ', nrigh
-    print '-->  Total:            ', nleft+nrigh
-    na = np.array(barray)
-    df = pd.DataFrame(na)
-    df.columns=['x','xp']
-    return df
 
-# run the program if it is started independently
+          
+try:
+    opts, args = getopt.getopt(sys.argv[1:], "hp:b:B:g:en:", ["help","path=", "b1=", "b2=", "halfgap=",
+                                                                    "existing", "npart="])
+except getopt.GetoptError as err:
+    # print help information and exit:
+    print("Error: option not recognized")
+    usage()
+    sys.exit(2)
+    output = None
+    verbose = False
+for o, a in opts:
+    if o in ["-h", "--help"]:
+        usage()
+        sys.exit(0)
+    elif o in ["-p", "--path"]:
+        path = a
+    elif o in ["--b1"]:
+        b1   = float(a)
+    elif o in ["--b2"]:
+        b2   = float(a)
+    elif o in ["-g", "--halfgap"]:
+        halfgap = float(a)
+    elif o in ["-e", "--existing"]:
+        existing=True
+    elif o in ["-n", "--npart"]:
+        npart = int(a)
 
-if __name__ == "__main__":
-    if len(sys.argv)!=5:
-        print 'ERROR: Wrong argument list'
-        print 'Usage:'
-        print 'python get_initial.py path b0, b1, xtcp [cm]'
-        print 'leaving...'
-        exit()
     else:
-        main(sys.argv[1],sys.argv[2],sys.argv[3],sys.argv[4])
+        assert False, "unhandled option"
+        # ...
 
+
+if not existing:
+    create_new_ini_files(path,b1,b2,halfgap)
+else:
+    multiply(path,npart)
 
