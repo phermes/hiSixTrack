@@ -64,7 +64,7 @@ class initial_result:
         
     def _read_hits(self,sign):
         df = pd.read_csv("{0}/{1}".format(self.dir,self.hitfn),
-                         delim_whitespace=True,usecols=[1,6],names=['pid','x'])
+                         delim_whitespace=True,usecols=[1,6],names=['pid','x'], error_bad_lines=False)
         
         df = df.assign(b=df['x'].apply(self._get_impact_par))
         self.hit = df
@@ -84,7 +84,7 @@ class initial_result:
         
     def _read_ini(self):
         df2 = pd.read_csv("{0}/{1}".format(self.dir,'initial.dat.gz'),
-                 delim_whitespace=True,header=None)
+                          delim_whitespace=True, header=None, error_bad_lines=False)
 
         cols = []
         for i in range(len(df2.columns)):
@@ -147,7 +147,7 @@ def floor(x):
     return int(x - x % 1)
             
 def multiply(path,npart):
-    df = pd.read_csv(path,delim_whitespace=True,header=None)
+    df = pd.read_csv(path,delim_whitespace=True,header=None, error_bad_lines=False)
     newdf = df
     
     # get number of required iterations
