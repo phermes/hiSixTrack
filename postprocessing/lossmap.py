@@ -60,6 +60,10 @@ if nargs<2:
     exit()
 elif nargs == 2:
     path = str(sys.argv[1])
+    fac  = 1
+elif nargs == 3:
+    path = str(sys.argv[1])
+    fac  = int(sys.argv[2])
 
 print(path)
     
@@ -71,10 +75,14 @@ def assign_warm_cold(s):
     return 'blue'
 
 class plot_hisix:
-    def __init__(self,path):
+    def __init__(self,path, fac):
         self.path = path
         self.read_collimator_losses()
         self.read_aperture_losses()
+        if fac==2:
+            self.coll['s'] = 26658.8832 - self.coll['s']
+            self.aper['s'] = 26658.8832 - self.aper['s']
+        
         self.plot_losses()
     def read_collimator_losses(self):
         self.coll = pd.read_csv('{0}/summary/fort.208'.format(self.path),
@@ -98,7 +106,8 @@ class plot_hisix:
         plt.xlabel('Position [m]')
         plt.ylabel(r'$\eta [1/m]$')
         plt.grid(axis='y')
+        plt.xlim(0,26658.88)
         plt.show()
 
         
-plot_hisix(path)
+plot_hisix(path, fac)
